@@ -9,7 +9,7 @@ from typing import Optional
 
 from ruamel.yaml import YAML
 
-from .buckets import BUCKET_MACRO
+from .buckets import BUCKET_MACRO, RAPID_MLX_BUCKET_MACRO
 from .colors import cyan, ok, step, warn
 
 # Round-trip YAML instance — preserves comments, ordering, blank lines, quotes
@@ -52,19 +52,30 @@ def _build_cmd(macro: str, gguf_path: Path, mmproj_path: Optional[Path], alias: 
     return "\n".join(lines) + "\n"
 
 
+def _build_rapid_mlx_cmd(macro: str, model_alias: str, alias: str) -> str:
+    lines = [
+        "${" + macro + "}",
+        f"--model {model_alias}",
+        f"--alias {alias}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def inject(
     swap_config_path: Path,
     repo_id: str,
     quant: Optional[str],
     bucket: str,
-    gguf_path: Path,
+    gguf_path: Optional[Path],
     mmproj_path: Optional[Path],
     macro: Optional[str],
     display_name: Optional[str],
+    engine: str = "llama",
 ) -> None:
     """
     Add a new model entry to the llama-swap config.
     Uses ruamel.yaml round-trip so comments/formatting are fully preserved.
+    engine: "llama" (llama-server, default) or "rapid-mlx" (Rapid-MLX).
     """
     if not swap_config_path.exists():
         warn(f"llama-swap config not found: {swap_config_path} — skipping")
@@ -72,18 +83,25 @@ def inject(
 
     step("Updating llama-swap config...")
 
-    model_key    = f"{repo_id}:{quant}" if quant else repo_id
-    resolved_mac = macro or BUCKET_MACRO.get(bucket, "llama-16k")
-
     author     = repo_id.split("/")[0]
     model_name = repo_id.split("/")[-1]
+
+    if engine == "rapid-mlx":
+        model_key    = repo_id
+        resolved_mac = macro or RAPID_MLX_BUCKET_MACRO.get(bucket, "rapid-mlx-16k")
+        cmd          = _build_rapid_mlx_cmd(resolved_mac, model_name, model_key)
+    else:
+        model_key    = f"{repo_id}:{quant}" if quant else repo_id
+        resolved_mac = macro or BUCKET_MACRO.get(bucket, "llama-16k")
+        cmd          = _build_cmd(resolved_mac, gguf_path or Path(), mmproj_path, model_key)
 
     # Name follows the established pattern:
     # "<size> | <author> | <model> | <ctx> | <capability>"
     # We set size + author + model here; ctx comes from the macro name (e.g. llama-28k → 28K)
     if not display_name:
         size_label = bucket.split("-")[-1]           # "31B" from "20B-31B"
-        ctx_label  = resolved_mac.replace("llama-", "").upper()   # "28K"
+        prefix     = "rapid-mlx-" if engine == "rapid-mlx" else "llama-"
+        ctx_label  = resolved_mac.replace(prefix, "").upper()   # "28K"
         capability = "Multi" if mmproj_path else "Writing"
         display_name = f"{size_label} | {author} | {model_name} | {ctx_label} | {capability}"
 
@@ -99,7 +117,7 @@ def inject(
     # Build the entry as a plain dict; ruamel will serialise it correctly
     from ruamel.yaml.scalarstring import LiteralScalarString
     entry = {
-        "cmd": LiteralScalarString(_build_cmd(resolved_mac, gguf_path, mmproj_path, model_key)),
+        "cmd": LiteralScalarString(cmd),
         "name": display_name,
         "proxy": "http://127.0.0.1:1234",
     }
@@ -114,6 +132,7 @@ def inject(
     print(f"    Key    : {cyan(model_key)}")
     print(f"    Name   : {cyan(display_name)}")
     print(f"    Macro  : {cyan(resolved_mac)}")
+    print(f"    Engine : {cyan(engine)}")
     print(f"    Backup : {bak}")
 
 

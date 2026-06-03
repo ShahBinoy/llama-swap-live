@@ -80,7 +80,7 @@ def cmd_remove(cfg: dict, no_confirm: bool = False) -> None:
 
 
 def cmd_add(cfg: dict, args: argparse.Namespace) -> None:
-    from .buckets import BUCKET_MACRO, ask_bucket, detect
+    from .buckets import ask_bucket, detect
     from .downloader import download
     from .swapconfig import inject
 
@@ -93,20 +93,21 @@ def cmd_add(cfg: dict, args: argparse.Namespace) -> None:
     force_bucket = args.size_bucket
     force_macro  = args.macro
     display_name = args.name
+    engine       = _normalize_engine(args.engine)
 
     model_root = expand(cfg["model-root"])
     swap_cfg   = expand(cfg["swap-config"])
 
-    from .colors import cyan, bold
-    print(f"\n    Repo  : {cyan(repo_id)}")
+    from .colors import cyan, bold, step, info
+    print(f"\n    Repo   : {cyan(repo_id)}")
     if quant:
-        print(f"    Quant : {cyan(quant)}")
-    print(f"    Multi : {cyan('yes' if multimodal else 'no')}")
+        print(f"    Quant  : {cyan(quant)}")
+    print(f"    Multi  : {cyan('yes' if multimodal else 'no')}")
+    print(f"    Engine : {cyan(engine)}")
 
     # Resolve size bucket
     if force_bucket:
         bucket = force_bucket
-        from .colors import info
         info(f"Using forced bucket: {bold(bucket)}")
     else:
         bucket = detect(repo_id)
@@ -115,37 +116,61 @@ def cmd_add(cfg: dict, args: argparse.Namespace) -> None:
 
     author     = repo_id.split("/")[0]
     model_name = repo_id.split("/")[-1]
-    dest_dir   = model_root / bucket / author / model_name
 
     print(f"    Bucket : {cyan(bucket)}")
-    print(f"    Dest   : {cyan(str(dest_dir))}")
 
-    gguf_path, mmproj_path = download(
-        repo_id, quant, dest_dir, multimodal, mmproj_quant
-    )
-
-    from .colors import step
-    step("Downloaded files:")
-    for f in sorted(dest_dir.iterdir()):
-        size_mb = f.stat().st_size / (1024 * 1024)
-        print(f"    {f.name}  ({size_mb:.0f} MB)")
-
-    if gguf_path:
+    if engine == "rapid-mlx":
+        # Rapid-MLX manages its own downloads — just inject the config entry
+        step("Skipping download (Rapid-MLX manages its own models)")
         inject(
             swap_config_path=swap_cfg,
             repo_id=repo_id,
-            quant=quant,
+            quant=None,
             bucket=bucket,
-            gguf_path=gguf_path,
-            mmproj_path=mmproj_path,
+            gguf_path=None,
+            mmproj_path=None,
             macro=force_macro,
             display_name=display_name,
+            engine=engine,
         )
     else:
-        warn("No GGUF found — skipping config update")
+        dest_dir = model_root / bucket / author / model_name
+        print(f"    Dest   : {cyan(str(dest_dir))}")
+
+        gguf_path, mmproj_path = download(
+            repo_id, quant, dest_dir, multimodal, mmproj_quant
+        )
+
+        step("Downloaded files:")
+
+        for f in sorted(dest_dir.iterdir()):
+            size_mb = f.stat().st_size / (1024 * 1024)
+            print(f"    {f.name}  ({size_mb:.0f} MB)")
+
+        if gguf_path:
+            inject(
+                swap_config_path=swap_cfg,
+                repo_id=repo_id,
+                quant=quant,
+                bucket=bucket,
+                gguf_path=gguf_path,
+                mmproj_path=mmproj_path,
+                macro=force_macro,
+                display_name=display_name,
+                engine=engine,
+            )
+        else:
+            warn("No GGUF found — skipping config update")
 
     print()
     ok("Done.")
+
+
+def _normalize_engine(raw: str) -> str:
+    """Normalise engine aliases to canonical form: llama or rapid-mlx."""
+    if raw in ("rapid-mlx", "mlx"):
+        return "rapid-mlx"
+    return "llama"
 
 
 # ── argument parser ────────────────────────────────────────────────────────────
@@ -171,6 +196,7 @@ Examples:
   llama-swap-live --add -r mradermacher/gemma-4-31B-GGUF -q Q6_K --mm
   llama-swap-live --add -r llmfan46/gemma-4-GGUF -q Q6_K --mm --mmproj-quant BF16
   llama-swap-live --add -r some/35B-MoE-GGUF -q Q5_K --size-bucket 32B-48B
+  llama-swap-live --add -r mlx-community/Qwen3.5-27B-4bit -e rapid-mlx
 """
 
 
@@ -205,8 +231,12 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--mm",                action="store_true", help="Multi-modal: also download mmproj file")
     g.add_argument("--mmproj-quant",      metavar="Q",      help="mmproj quant preference (default: BF16)")
     g.add_argument("--size-bucket",       metavar="BUCKET", help="Force size bucket e.g. 20B-31B")
-    g.add_argument("--macro",             metavar="MACRO",  help="Override llama-swap macro name")
+    g.add_argument("--macro",             metavar="MACRO",  help="Override macro name (e.g. llama-28k or rapid-mlx-28k)")
     g.add_argument("--name",              metavar="NAME",   help="Override display name in config")
+    g.add_argument("-e", "--engine",      metavar="ENGINE",
+                   choices=["llama", "llama-server", "rapid-mlx", "mlx"],
+                   default="llama",
+                   help="Target inference engine: llama (llama-server) or rapid-mlx (mlx)")
 
     # ── --rm options ───────────────────────────────────────────────────────────
     r = p.add_argument_group("--rm options")

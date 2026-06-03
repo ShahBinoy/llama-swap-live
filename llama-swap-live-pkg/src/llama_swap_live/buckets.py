@@ -19,12 +19,22 @@ BUCKETS = [
 
 BUCKET_MACRO: dict[str, str] = {
     "7B-8B":    "llama-32k",
-    "10B-13B":  "llama-32k",
+    "10B-13B":  "llama-28k",
     "14B-19B":  "llama-28k",
     "20B-31B":  "llama-28k",
     "32B-48B":  "llama-16k",
     "48B-71B":  "llama-16k",
     "72B-120B": "llama-8k",
+}
+
+RAPID_MLX_BUCKET_MACRO: dict[str, str] = {
+    "7B-8B":    "rapid-mlx-32k",
+    "10B-13B":  "rapid-mlx-28k",
+    "14B-19B":  "rapid-mlx-28k",
+    "20B-31B":  "rapid-mlx-28k",
+    "32B-48B":  "rapid-mlx-16k",
+    "48B-71B":  "rapid-mlx-16k",
+    "72B-120B": "rapid-mlx-8k",
 }
 
 

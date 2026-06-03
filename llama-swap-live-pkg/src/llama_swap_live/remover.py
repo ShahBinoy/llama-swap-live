@@ -53,13 +53,27 @@ _FLAG_RE = re.compile(r"--(\w[\w-]*)\s+(\S+)")
 
 
 def _extract_paths(cmd_str: str) -> tuple[Optional[Path], Optional[Path]]:
-    """Extract --model and --mmproj paths from the cmd literal block string."""
+    """Extract --model and --mmproj paths from the cmd literal block string.
+    
+    If a value looks like a model alias (single token, no path separators,
+    not an existing file) it is treated as None — Rapid-MLX entries
+    don't have local model directories to remove.
+    """
     flags: dict[str, str] = {}
     for flag, value in _FLAG_RE.findall(cmd_str):
         flags.setdefault(flag, value)   # first occurrence wins
-    model  = Path(flags["model"])  if "model"  in flags else None
-    mmproj = Path(flags["mmproj"]) if "mmproj" in flags else None
-    return model, mmproj
+
+    def _as_path(val: Optional[str]) -> Optional[Path]:
+        if val is None:
+            return None
+        p = Path(val)
+        # If it looks like a model alias (no separators, not an existing file)
+        # treat it as a non-path — Rapid-MLX manages its own storage.
+        if "/" not in val and "\\" not in val and not p.exists():
+            return None
+        return p
+
+    return _as_path(flags.get("model")), _as_path(flags.get("mmproj"))
 
 
 def _size_token(name: str) -> str:

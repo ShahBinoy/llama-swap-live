@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llama-swap-live"
+version = "0.4.0"
+description = "Unified manager for llama-swap and HuggingFace model downloads"
+requires-python = ">=3.10"
+dependencies = [
+    "huggingface_hub>=0.20.0",
+    "ruamel.yaml>=0.18.0",
+    "requests>=2.28",
+]
+
+[project.scripts]
+llama-swap-live = "llama_swap_live.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llama_swap_live"]

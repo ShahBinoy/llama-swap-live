@@ -8,6 +8,15 @@ Registry:  ENGINES["llama-server"]  →  LlamaServerEngine()
            ENGINES["rapid-mlx"]     →  RapidMlxEngine()
 """
 from __future__ import annotations
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("llama-swap-live")
+except PackageNotFoundError:
+    # Package not installed (e.g. running directly from source tree)
+    __version__ = "0.0.0-dev"
+
+
 
 from abc import ABC, abstractmethod
 from pathlib import Path

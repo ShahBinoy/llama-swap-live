@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .colors import info, ok, warn, die, step, cyan
+from .colors import cyan, die, info, ok, step, warn
 
 
 def find_pids() -> list[int]:
@@ -49,19 +49,20 @@ def stop(timeout: int = 6) -> None:
 
 def start(binary: Path, swap_config: Path, listen: str, log_file: Path) -> None:
     if not binary.exists():
-        die(f"Binary not found: {binary}\nRun: llama-swap-live --update")
+        die(f"llama-swap binary not found: {binary}\nRun: llama-swap-live --update")
     if not swap_config.exists():
-        die(f"Config not found: {swap_config}")
+        die(f"llama-swap config not found: {swap_config}")
 
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = open(log_file, "a")
 
-    proc = subprocess.Popen(
-        [str(binary), "--config", str(swap_config), "--listen", listen],
-        stdout=log_fh,
-        stderr=log_fh,
-        start_new_session=True,
-    )
+    with open(log_file, "a") as log_fh:
+        proc = subprocess.Popen(
+            [str(binary), "--config", str(swap_config), "--listen", listen],
+            stdout=log_fh,
+            stderr=log_fh,
+            start_new_session=True,
+        )
+
     time.sleep(2)
 
     if proc.poll() is not None:

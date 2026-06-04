@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llama-swap-live"
-version = "0.5.0"
+version = "0.6.0"
 description = "Unified manager for llama-swap and HuggingFace model downloads"
 requires-python = ">=3.10"
 dependencies = [
